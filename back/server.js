@@ -1,0 +1,166 @@
+const express = require('express');
+const cors = require('cors');
+const Database = require('./database');
+
+const app = express();
+const port = process.env.PORT || 8080;
+const allowedOrigins = process.env.ALLOWED_ORIGINS || 'http://localhost:5173';
+
+// Inicializar base de datos
+const db = new Database();
+
+// Middleware
+app.use(express.json());
+
+// Configurar CORS
+app.use(cors({
+  origin: allowedOrigins.split(','),
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'Content-Type', 'Accept'],
+  credentials: true
+}));
+
+// Rutas
+
+// Health check
+app.get('/healthz', async (req, res) => {
+  try {
+    await db.ping();
+    res.json({
+      status: 'ok',
+      database: 'sqlite',
+      timestamp: new Date().toISOString(),
+      port: port
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      error: error.message,
+      database: 'sqlite'
+    });
+  }
+});
+
+// GET /users - Obtener todos los usuarios
+app.get('/users', async (req, res) => {
+  try {
+    const users = await db.getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error obteniendo usuarios:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: error.message
+    });
+  }
+});
+
+// POST /users - Crear usuario
+app.post('/users', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Validación
+    if (!username || !password) {
+      return res.status(400).json({
+        error: 'Se requieren username y password'
+      });
+    }
+
+    if (username.trim().length < 3) {
+      return res.status(400).json({
+        error: 'El username debe tener al menos 3 caracteres'
+      });
+    }
+
+    if (password.length < 4) {
+      return res.status(400).json({
+        error: 'El password debe tener al menos 4 caracteres'
+      });
+    }
+
+    // Crear usuario
+    const result = await db.createUser(username.trim(), password);
+    
+    res.status(201).json({
+      message: result.message,
+      id: result.id,
+      username: result.username
+    });
+
+  } catch (error) {
+    console.error('Error creando usuario:', error);
+    
+    if (error.message === 'El username ya existe') {
+      res.status(409).json({
+        error: error.message
+      });
+    } else {
+      res.status(500).json({
+        error: 'Error interno del servidor',
+        details: error.message
+      });
+    }
+  }
+});
+
+// GET /users/:id - Obtener usuario por ID
+app.get('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await db.getUserById(id);
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado'
+      });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    console.error('Error obteniendo usuario:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: error.message
+    });
+  }
+});
+
+// Ruta por defecto
+app.get('/', (req, res) => {
+  res.json({
+    message: '🚀 API Node.js + SQLite funcionando',
+    version: '1.0.0',
+    endpoints: {
+      health: 'GET /healthz',
+      users: 'GET /users',
+      createUser: 'POST /users',
+      getUser: 'GET /users/:id'
+    }
+  });
+});
+
+// Manejo de errores 404
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Endpoint no encontrado',
+    method: req.method,
+    path: req.originalUrl
+  });
+});
+
+// Manejo de cierre graceful
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Cerrando servidor...');
+  await db.close();
+  process.exit(0);
+});
+
+// Iniciar servidor
+app.listen(port, () => {
+  console.log(`🚀 Servidor Node.js iniciado en puerto ${port}`);
+  console.log(`📊 Base de datos: SQLite`);
+  console.log(`🌐 CORS permitido: ${allowedOrigins}`);
+  console.log(`📍 Health check: http://localhost:${port}/healthz`);
+  console.log(`👥 Usuarios: http://localhost:${port}/users`);
+});
