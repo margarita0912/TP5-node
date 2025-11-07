@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const Database = require('./database');
 
 const app = express();
@@ -12,18 +13,29 @@ const db = new Database();
 // Middleware
 app.use(express.json());
 
-// Configurar CORS
-app.use(cors({
-  origin: allowedOrigins.split(','),
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Origin', 'Content-Type', 'Accept'],
-  credentials: true
-}));
+// Configurar CORS solo para desarrollo
+if (process.env.NODE_ENV !== 'production') {
+  app.use(cors({
+    origin: allowedOrigins.split(','),
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'Content-Type', 'Accept'],
+    credentials: true
+  }));
+}
 
-// Rutas
+// Servir archivos estáticos del frontend
+const frontendPath = path.join(__dirname, 'dist');
+try {
+  app.use(express.static(frontendPath));
+  console.log('📁 Sirviendo frontend desde:', frontendPath);
+} catch (error) {
+  console.log('⚠️ Frontend dist no encontrado, solo API disponible');
+}
+
+// Rutas de la API (con prefijo /api)
 
 // Health check
-app.get('/healthz', async (req, res) => {
+app.get('/api/healthz', async (req, res) => {
   try {
     await db.ping();
     res.json({
@@ -41,8 +53,8 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
-// GET /users - Obtener todos los usuarios
-app.get('/users', async (req, res) => {
+// GET /api/users - Obtener todos los usuarios
+app.get('/api/users', async (req, res) => {
   try {
     const users = await db.getAllUsers();
     res.json(users);
@@ -55,8 +67,8 @@ app.get('/users', async (req, res) => {
   }
 });
 
-// POST /users - Crear usuario
-app.post('/users', async (req, res) => {
+// POST /api/users - Crear usuario
+app.post('/api/users', async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -104,8 +116,8 @@ app.post('/users', async (req, res) => {
   }
 });
 
-// GET /users/:id - Obtener usuario por ID
-app.get('/users/:id', async (req, res) => {
+// GET /api/users/:id - Obtener usuario por ID
+app.get('/api/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const user = await db.getUserById(id);
@@ -126,27 +138,40 @@ app.get('/users/:id', async (req, res) => {
   }
 });
 
-// Ruta por defecto
-app.get('/', (req, res) => {
+// Ruta de información de la API
+app.get('/api', (req, res) => {
   res.json({
     message: '🚀 API Node.js + SQLite funcionando',
     version: '1.0.0',
     endpoints: {
-      health: 'GET /healthz',
-      users: 'GET /users',
-      createUser: 'POST /users',
-      getUser: 'GET /users/:id'
+      health: 'GET /api/healthz',
+      users: 'GET /api/users',
+      createUser: 'POST /api/users',
+      getUser: 'GET /api/users/:id'
     }
   });
 });
 
-// Manejo de errores 404
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Endpoint no encontrado',
-    method: req.method,
-    path: req.originalUrl
-  });
+// Fallback para el frontend (SPA)
+app.get('*', (req, res) => {
+  // Si es una ruta de API que no existe, devolver 404 JSON
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({
+      error: 'Endpoint de API no encontrado',
+      method: req.method,
+      path: req.originalUrl
+    });
+  }
+  
+  // Para cualquier otra ruta, servir el frontend
+  try {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  } catch (error) {
+    res.status(404).json({
+      error: 'Frontend no disponible',
+      message: 'Ejecuta el build del frontend primero'
+    });
+  }
 });
 
 // Manejo de cierre graceful
@@ -158,9 +183,10 @@ process.on('SIGINT', async () => {
 
 // Iniciar servidor
 app.listen(port, () => {
-  console.log(`🚀 Servidor Node.js iniciado en puerto ${port}`);
+  console.log(`🚀 Servidor Full-Stack iniciado en puerto ${port}`);
   console.log(`📊 Base de datos: SQLite`);
-  console.log(`🌐 CORS permitido: ${allowedOrigins}`);
-  console.log(`📍 Health check: http://localhost:${port}/healthz`);
-  console.log(`👥 Usuarios: http://localhost:${port}/users`);
+  console.log(`🌐 Aplicación: http://localhost:${port}`);
+  console.log(`📍 Health check: http://localhost:${port}/api/healthz`);
+  console.log(`👥 API Usuarios: http://localhost:${port}/api/users`);
+  console.log(`📁 Frontend: http://localhost:${port}`);
 });

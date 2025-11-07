@@ -1,5 +1,5 @@
 // Servicio para comunicarse con la API del backend
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = '/api';
 
 // Verificar estado del servidor
 export const checkHealth = async () => {

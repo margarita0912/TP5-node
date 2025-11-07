@@ -1,0 +1,20 @@
+{
+  "name": "tp5-fullstack-app",
+  "version": "1.0.0",
+  "description": "Aplicación Full-Stack: React + Node.js + SQLite",
+  "main": "back/server.js",
+  "scripts": {
+    "setup": "npm install --prefix back && npm install --prefix front",
+    "build": "npm run build --prefix front && rm -rf back/dist && mkdir -p back/dist && cp -r front/dist/* back/dist/",
+    "start": "npm start --prefix back",
+    "dev:back": "npm run dev --prefix back",
+    "dev:front": "npm run dev --prefix front",
+    "dev": "concurrently \"npm run dev:back\" \"npm run dev:front\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
