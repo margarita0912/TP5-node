@@ -1,0 +1,140 @@
+trigger:
+  - main
+
+variables:
+  Node_Version: '20.x'
+  ArtifactName: 'drop-back'
+  QaWebApp: 'tp5-webapp-qa'
+  ProdWebApp: 'tp5-webapp-prod'
+
+stages:
+# ========== BUILD ==========
+- stage: Build
+  displayName: Build & Package
+  jobs:
+  - job: build_and_package
+    displayName: Build front, package back
+    pool: { vmImage: 'ubuntu-latest' }
+    steps:
+    - checkout: self
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '$(Node_Version)'
+      displayName: 'Use Node $(Node_Version)'
+
+    # Instalar dependencias de front y back (limpias)
+    - script: |
+        npm ci --prefix front
+        npm ci --prefix back
+      displayName: 'npm ci (front & back)'
+
+    - script: |
+        npm run build --prefix front
+      displayName: 'Build front (outDir = back/dist)'
+
+    # Producción: instalar sólo deps de runtime dentro de back/
+    - script: |
+        npm ci --prefix back --omit=dev
+      displayName: 'npm ci --omit=dev (back)'
+
+    # Armar carpeta final para desplegar (sólo back/)
+    - script: |
+        mkdir -p out_back
+        cp -r back/* out_back/
+        # conservar sólo archivos necesarios
+        rm -rf out_back/node_modules/.cache || true
+      displayName: 'Preparar carpeta de despliegue'
+
+    # Empaquetar
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: 'out_back'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(ArtifactName).zip'
+        replaceExistingArchive: true
+      displayName: 'Empaquetar backend (zip)'
+
+    # Publicar artefacto
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/$(ArtifactName).zip'
+        ArtifactName: '$(ArtifactName)'
+        publishLocation: 'Container'
+      displayName: 'Publicar artefacto'
+
+# ========== DEPLOY QA ==========
+- stage: Deploy_QA
+  displayName: Deploy to QA
+  dependsOn: Build
+  jobs:
+  - deployment: qa_app
+    displayName: 'WebApp → QA'
+    environment: 'qa'   # Crea Environment "qa" si no existe
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to QA'
+            inputs:
+              azureSubscription: 'sc-azure-tp5'
+              appType: 'webAppLinux'
+              appName: '$(QaWebApp)'
+              package: '$(Pipeline.Workspace)/$(ArtifactName)/$(ArtifactName).zip'
+              runtimeStack: 'NODE|20-lts'
+
+          # Health check básico con reintentos
+          - script: |
+              URL="https://$(QaWebApp)-befse5eqbqa8cjdm.brazilsouth-01.azurewebsites.net/api/healthz"
+              echo "Health check → $URL"
+              for i in {1..12}; do
+                code=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+                echo "Intento $i: HTTP $code"
+                if [ "$code" = "200" ]; then
+                  echo "OK"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "FALLÓ health check en QA"
+              exit 1
+            displayName: 'Health check QA (/api/healthz)'
+
+# ========== DEPLOY PROD (con aprobación) ==========
+- stage: Deploy_Prod
+  displayName: Deploy to PROD
+  dependsOn: Deploy_QA
+  jobs:
+  - deployment: prod_app
+    displayName: 'WebApp → PROD'
+    environment: 'prod'  # Configurá aprobaciones en Environment "prod"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to PROD'
+            inputs:
+              azureSubscription: 'sc-azure-tp5'
+              appType: 'webAppLinux'
+              appName: '$(ProdWebApp)'
+              package: '$(Pipeline.Workspace)/$(ArtifactName)/$(ArtifactName).zip'
+              runtimeStack: 'NODE|20-lts'
+
+          - script: |
+              URL="https://$(ProdWebApp)-a9bhg2ekf2fgdwdm.brazilsouth-01.azurewebsites.net/api/healthz"
+              echo "Health check → $URL"
+              for i in {1..12}; do
+                code=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+                echo "Intento $i: HTTP $code"
+                if [ "$code" = "200" ]; then
+                  echo "OK"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "FALLÓ health check en PROD"
+              exit 1
+            displayName: 'Health check PROD (/api/healthz)'
