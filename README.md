@@ -12,8 +12,8 @@ Desplegada con **Azure Pipelines** usando dos entornos:
 
 | Entorno | WebApp URL | Health Check |
 |---------|------------|--------------|
-| **QA** | https://tp5-webapp-qa-XXXXXX.region-01.azurewebsites.net | `/api/healthz` |
-| **PRODUCCIÓN** | https://tp5-webapp-prod-XXXXXX.region-01.azurewebsites.net | `/api/healthz` |
+| **QA** | tp5-webapp-qa-befse5eqbqa8cjdm.brazilsouth-01.azurewebsites.net | `/api/healthz` |
+| **PRODUCCIÓN** | tp5-webapp-prod-a9bhg2ekf2fgdwdm.brazilsouth-01.azurewebsites.net | `/api/healthz` |
 
 ---
 
