@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import './App.css'
-import ServerStatus from './components/ServerStatus'
 import CreateUser from './components/CreateUser'
 import UserList from './components/UserList'
 import SearchUser from './components/SearchUser'
@@ -17,7 +16,6 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>APP USUARIOS!</h1>
-        <ServerStatus />
       </header>
 
       <main className="app-main">
@@ -35,10 +33,6 @@ function App() {
           </div>
         </div>
       </main>
-
-      <footer className="app-footer">
-        <p>💻 Desarrollado con React + Vite | 🔗 API Node.js + SQLite</p>
-      </footer>
     </div>
   )
 }
